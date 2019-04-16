@@ -18,7 +18,7 @@ def packageUpload(String version, String build_type) {
                            ctest --output-on-failure --timeout ${CTEST_TIMEOUT}
                            make package
                            """
-                oe.Run("clang-7", task)
+                oe.Run("clang-8", task)
                 azureUpload(storageCredentialId: 'oe_jenkins_storage_account', filesPath: 'build/*.deb', storageType: 'blobstorage', virtualPath: "master/${BUILD_NUMBER}/ubuntu/${version}/${build_type}/SGX1FLC/", containerName: 'oejenkins')
                 azureUpload(storageCredentialId: 'oe_jenkins_storage_account', filesPath: 'build/*.deb', storageType: 'blobstorage', virtualPath: "master/latest/ubuntu/${version}/${build_type}/SGX1FLC/", containerName: 'oejenkins')
             }
@@ -51,3 +51,4 @@ parallel "1604 SGX1FLC Package Debug" :          { packageUpload('1604', 'Debug'
          "1804 SGX1FLC Package Release" :        { packageUpload('1804', 'Release') },
          "1804 SGX1FLC Package RelWithDebInfo" : { packageUpload('1804', 'RelWithDebInfo') },
          "Windows Release" :                     { WindowsUpload() }
+
