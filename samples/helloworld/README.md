@@ -226,7 +226,7 @@ Here is a listing of key components in the helloworld/enclave/Makefile. Also see
 
 ```make
 # Detect C and C++ compiler options
-# if not gcc, default to clang-7
+# if not gcc, default to clang-8
 
 COMPILER=$(notdir $(CC))
 ifeq ($(COMPILER), gcc)
@@ -234,7 +234,7 @@ ifeq ($(COMPILER), gcc)
 endif
 
 ifeq ($(USE_GCC),)
-        CC = clang-7
+        CC = clang-8
         COMPILER=clang
 endif
 
@@ -448,7 +448,7 @@ Listing of [helloworld/host/Makefile](host/Makefile)
 
 ```make
 # Detect C and C++ compiler options
-# if not gcc, default to clang-7
+# if not gcc, default to clang-8
 
 COMPILER=$(notdir $(CC))
 ifeq ($(COMPILER), gcc)
@@ -456,7 +456,7 @@ ifeq ($(COMPILER), gcc)
 endif
 
 ifeq ($(USE_GCC),)
-        CC = clang-7
+        CC = clang-8
         COMPILER=clang
 endif
 
