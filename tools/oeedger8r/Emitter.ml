@@ -233,18 +233,18 @@ let oe_gen_wrapper_prototype (fd: func_decl) (is_ecall:bool) =
   sprintf "oe_result_t %s(\n        %s)" fd.fname (String.concat ",\n        " args)
 
 let emit_struct_or_union (s:struct_def) (union:bool) =
-  let typedef = sprintf "typedef %s %s {\n" (if union then "union" else "struct") s.sname in
+  let typedef = sprintf "typedef %s %s {" (if union then "union" else "struct") s.sname in
   let members = List.map (fun (atype, decl) ->
       let dims = List.map (fun d-> sprintf "[%d]" d) decl.array_dims in
       let dims_str = String.concat "" dims in
-      sprintf "    %s %s%s;\n" (get_tystr atype) decl.identifier dims_str
+      sprintf "    %s %s%s;" (get_tystr atype) decl.identifier dims_str
     ) s.mlist in
-  let name = sprintf "} %s;\n\n" s.sname in
+  let name = sprintf "} %s;\n" s.sname in
   List.flatten [[typedef;]; members; [name;]]
 
 let emit_enum (e:enum_def) =
   let n = List.length e.enbody in
-  let typedef = sprintf "typedef enum %s {\n" e.enname in
+  let typedef = sprintf "typedef enum %s {" e.enname in
   let members = List.mapi (fun idx (name, value) ->
       sprintf "    %s%s%s"
         name
@@ -252,9 +252,9 @@ let emit_enum (e:enum_def) =
          | EnumVal (AString s) -> " = " ^ s
          | EnumVal (ANumber n) -> " = " ^ (string_of_int n)
          | EnumValNone -> "")
-        (if idx != (n-1) then ",\n" else "")
+        (if idx != (n-1) then "," else "")
     ) e.enbody in
-  let name = sprintf "} %s;\n\n" e.enname in
+  let name = sprintf "} %s;\n" e.enname in
   List.flatten [[typedef;]; members; [name;]]
 
 (** Emit [struct], [union], or [enum]. *)
@@ -291,6 +291,7 @@ let oe_gen_args_header (ec: enclave_content) (dir:string)=
       (* For each ocall, generate its marshalling struct. *)
       (List.map oe_gen_ocall_marshal_struct ec.ufunc_decls)
   in
+  let types = List.flatten (List.map emit_composite_type ec.comp_defs) in
   let with_errno = List.exists (fun uf -> uf.uf_propagate_errno) ec.ufunc_decls in
   let header_fname = sprintf "%s_args.h" ec.file_shortnm in
   let guard_macro = sprintf "%s_ARGS_H" (String.uppercase ec.enclave_name) in
@@ -304,8 +305,7 @@ let oe_gen_args_header (ec: enclave_content) (dir:string)=
   List.iter (fun inc -> fprintf os "#include \"%s\"\n" inc) ec.include_list;
   if ec.include_list <> [] then fprintf os "\n";
   if ec.comp_defs <> [] then fprintf os "/* User types specified in edl */\n";
-  let types = List.map emit_composite_type ec.comp_defs in
-  List.iter (fun x -> fprintf os "%s" x) (List.flatten types);
+  fprintf os "%s" (String.concat "\n" types);
   if ec.comp_defs <> [] then fprintf os "\n";
   fprintf os "%s" (String.concat "\n" structs);
   emit_function_ids os ec;
