@@ -233,29 +233,29 @@ let oe_gen_wrapper_prototype (fd: func_decl) (is_ecall:bool) =
   sprintf "oe_result_t %s(\n        %s)" fd.fname (String.concat ",\n        " args)
 
 let emit_struct_or_union (s:struct_def) (union:bool) =
-  let typedef = sprintf "typedef %s %s {" (if union then "union" else "struct") s.sname in
-  let members = List.map (fun (atype, decl) ->
-      let dims = List.map (fun d-> sprintf "[%d]" d) decl.array_dims in
-      let dims_str = String.concat "" dims in
-      sprintf "    %s %s%s;" (get_tystr atype) decl.identifier dims_str
-    ) s.mlist in
-  let name = sprintf "} %s;\n" s.sname in
-  List.flatten [[typedef;]; members; [name;]]
+  List.concat [
+    [sprintf "typedef %s %s {" (if union then "union" else "struct") s.sname];
+    List.map (fun (atype, decl) ->
+        let dims = List.map (fun d-> sprintf "[%d]" d) decl.array_dims in
+        let dims_str = String.concat "" dims in
+        sprintf "    %s %s%s;" (get_tystr atype) decl.identifier dims_str
+      ) s.mlist;
+    [sprintf "} %s;\n" s.sname]]
 
 let emit_enum (e:enum_def) =
   let n = List.length e.enbody in
-  let typedef = sprintf "typedef enum %s {" e.enname in
-  let members = List.mapi (fun idx (name, value) ->
-      sprintf "    %s%s%s"
-        name
-        (match value with
-         | EnumVal (AString s) -> " = " ^ s
-         | EnumVal (ANumber n) -> " = " ^ (string_of_int n)
-         | EnumValNone -> "")
-        (if idx != (n-1) then "," else "")
-    ) e.enbody in
-  let name = sprintf "} %s;\n" e.enname in
-  List.flatten [[typedef;]; members; [name;]]
+  List.concat [
+    [sprintf "typedef enum %s {" e.enname];
+    List.mapi (fun idx (name, value) ->
+        sprintf "    %s%s%s"
+          name
+          (match value with
+           | EnumVal (AString s) -> " = " ^ s
+           | EnumVal (ANumber n) -> " = " ^ (string_of_int n)
+           | EnumValNone -> "")
+          (if idx != (n-1) then "," else "")
+      ) e.enbody;
+    [sprintf "} %s;\n" e.enname]]
 
 (** Emit [struct], [union], or [enum]. *)
 let emit_composite_type = function
