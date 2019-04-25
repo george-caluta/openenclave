@@ -347,23 +347,33 @@ let get_cast_to_mem_type (ptype, decl)=
     else
       get_tystr t
 
-let is_in_or_inout_ptr (ptype, _) =
+let is_in_ptr (ptype, _) =
   match ptype with
   | PTVal _ -> false
   | PTPtr (_, ptr_attr) ->
     if ptr_attr.pa_chkptr then
       match ptr_attr.pa_direction with
-      | PtrIn | PtrInOut -> true
+      | PtrIn -> true
       | _ -> false
     else false
 
-let is_out_or_inout_ptr (ptype, _) =
+let is_out_ptr (ptype, _) =
   match ptype with
   | PTVal _ -> false
   | PTPtr (_, ptr_attr) ->
     if ptr_attr.pa_chkptr then
       match ptr_attr.pa_direction with
-      | PtrOut | PtrInOut -> true
+      | PtrOut -> true
+      | _ -> false
+    else false
+
+let is_inout_ptr (ptype, _) =
+  match ptype with
+  | PTVal _ -> false
+  | PTPtr (_, ptr_attr) ->
+    if ptr_attr.pa_chkptr then
+      match ptr_attr.pa_direction with
+      | PtrInOut -> true
       | _ -> false
     else false
 
@@ -374,10 +384,9 @@ let oe_prepare_input_buffer (fd:func_decl) (alloc_func:string) =
     [sprintf "    OE_ADD_SIZE(_input_buffer_size, sizeof(%s_args_t));" fd.fname];
     List.map
       (fun (ptype, decl) ->
-         (* TODO: Deduplicate this and the next copy that differ only the buffer. *)
          let size = oe_get_param_size (ptype, decl, "_args.") in
          sprintf "    if (%s) OE_ADD_SIZE(_input_buffer_size, %s);" decl.identifier size)
-      (List.filter is_in_or_inout_ptr fd.plist);
+      (List.filter (fun p -> (is_in_ptr p || is_inout_ptr p)) fd.plist);
     [""];
     ["    /* Compute output buffer size. Include out and in-out parameters. */"];
     [sprintf "    OE_ADD_SIZE(_output_buffer_size, sizeof(%s_args_t));" fd.fname];
@@ -385,7 +394,7 @@ let oe_prepare_input_buffer (fd:func_decl) (alloc_func:string) =
       (fun (ptype, decl) ->
          let size = oe_get_param_size (ptype, decl, "_args.") in
          sprintf "    if (%s) OE_ADD_SIZE(_output_buffer_size, %s);" decl.identifier size)
-      (List.filter is_out_or_inout_ptr fd.plist);
+      (List.filter (fun p -> (is_out_ptr p || is_inout_ptr p)) fd.plist);
     [""];
     ["    /* Allocate marshalling buffer */"];
     ["    _total_buffer_size = _input_buffer_size;"];
@@ -398,25 +407,20 @@ let oe_prepare_input_buffer (fd:func_decl) (alloc_func:string) =
     ["        _result = OE_OUT_OF_MEMORY;"];
     ["        goto done;"];
     ["    }"];
-    [""];
-
-    (* Serialize in and in-out parameters *)
+    [""]; (* Serialize in and in-out parameters *)
     ["    /* Serialize buffer inputs (in and in-out parameters) */"];
     [sprintf "    _pargs_in = (%s_args_t*)_input_buffer;" fd.fname];
     ["    OE_ADD_SIZE(_input_buffer_offset, sizeof(*_pargs_in));\n"];
     List.map (fun (ptype, decl) ->
-        match ptype with
-        | PTPtr (atype, ptr_attr) ->
-          if ptr_attr.pa_chkptr then
-            let size = oe_get_param_size (ptype, decl, "_args.") in
-            let tystr = get_cast_to_mem_type (ptype, decl) in
-            match ptr_attr.pa_direction with
-            | PtrIn -> sprintf "    OE_WRITE_IN_PARAM(%s, %s, %s);" decl.identifier size tystr
-            | PtrInOut -> sprintf "    OE_WRITE_IN_OUT_PARAM(%s, %s, %s);" decl.identifier size tystr
-            | _ -> ""
-          else ""
-        | _ -> ""
-      ) fd.plist;
+        let size = oe_get_param_size (ptype, decl, "_args.") in
+        let tystr = get_cast_to_mem_type (ptype, decl) in
+        sprintf "    OE_WRITE_IN_PARAM(%s, %s, %s);" decl.identifier size tystr)
+      (List.filter is_in_ptr fd.plist);
+    List.map (fun (ptype, decl) ->
+        let size = oe_get_param_size (ptype, decl, "_args.") in
+        let tystr = get_cast_to_mem_type (ptype, decl) in
+        sprintf "    OE_WRITE_IN_OUT_PARAM(%s, %s, %s);" decl.identifier size tystr)
+      (List.filter is_inout_ptr fd.plist);
     [""];
     ["    /* Copy args structure (now filled) to input buffer */"];
     ["    memcpy(_pargs_in, &_args, sizeof(*_pargs_in));\n"]]
