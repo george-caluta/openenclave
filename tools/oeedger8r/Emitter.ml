@@ -228,30 +228,32 @@ let oe_gen_wrapper_prototype (fd: func_decl) (is_ecall: bool) =
   let args = List.filter (fun s -> s <> "") args in
   sprintf "oe_result_t %s(\n        %s)" fd.fname (String.concat ",\n        " args)
 
-let emit_struct_or_union (s:struct_def) (union:bool) =
-  List.concat [
-    [sprintf "typedef %s %s {" (if union then "union" else "struct") s.sname];
-    List.map (fun (atype, decl) ->
-        let dims = List.map (fun d-> sprintf "[%d]" d) decl.array_dims in
-        let dims_str = String.concat "" dims in
-        sprintf "    %s %s%s;" (get_tystr atype) decl.identifier dims_str
-      ) s.mlist;
-    [sprintf "} %s;\n" s.sname]]
+let emit_struct_or_union (s: struct_def) (union: bool) =
+  [sprintf "typedef %s %s {" (if union then "union" else "struct") s.sname;
+   String.concat "\n"
+     (List.map
+        (fun (atype, decl) ->
+           let dims = List.map (fun d-> sprintf "[%d]" d) decl.array_dims in
+           let dims_str = String.concat "" dims in
+           sprintf "    %s %s%s;" (get_tystr atype) decl.identifier dims_str)
+        s.mlist);
+   sprintf "} %s;\n" s.sname]
 
 let emit_enum (e: enum_def) =
   let n = List.length e.enbody in
-  List.concat [
-    [sprintf "typedef enum %s {" e.enname];
-    List.mapi (fun idx (name, value) ->
-        sprintf "    %s%s%s"
-          name
-          (match value with
-           | EnumVal (AString s) -> " = " ^ s
-           | EnumVal (ANumber n) -> " = " ^ (string_of_int n)
-           | EnumValNone -> "")
-          (if idx != (n-1) then "," else "")
-      ) e.enbody;
-    [sprintf "} %s;\n" e.enname]]
+  [sprintf "typedef enum %s {" e.enname;
+   String.concat "\n"
+     (List.mapi
+        (fun idx (name, value) ->
+           sprintf "    %s%s%s"
+             name
+             (match value with
+              | EnumVal (AString s) -> " = " ^ s
+              | EnumVal (ANumber n) -> " = " ^ (string_of_int n)
+              | EnumValNone -> "")
+             (if idx != (n - 1) then "," else ""))
+        e.enbody);
+   sprintf "} %s;\n" e.enname]
 
 (** Emit [struct], [union], or [enum]. *)
 let emit_composite_type = function
@@ -373,54 +375,65 @@ let is_inout_ptr (ptype, _) =
     else false
 
 (** Prepare [input_buffer]. *)
-let oe_prepare_input_buffer (fd:func_decl) (alloc_func:string) =
-  List.concat [
-    ["    /* Compute input buffer size. Include in and in-out parameters. */"];
-    [sprintf "    OE_ADD_SIZE(_input_buffer_size, sizeof(%s_args_t));" fd.fname];
-    List.map
-      (fun (ptype, decl) ->
-         let size = oe_get_param_size (ptype, decl, "_args.") in
-         sprintf "    if (%s) OE_ADD_SIZE(_input_buffer_size, %s);" decl.identifier size)
-      (List.filter (fun p -> (is_in_ptr p || is_inout_ptr p)) fd.plist);
-    [""];
-    ["    /* Compute output buffer size. Include out and in-out parameters. */"];
-    [sprintf "    OE_ADD_SIZE(_output_buffer_size, sizeof(%s_args_t));" fd.fname];
-    List.map
-      (fun (ptype, decl) ->
-         let size = oe_get_param_size (ptype, decl, "_args.") in
-         sprintf "    if (%s) OE_ADD_SIZE(_output_buffer_size, %s);" decl.identifier size)
-      (List.filter (fun p -> (is_out_ptr p || is_inout_ptr p)) fd.plist);
-    [""];
-    ["    /* Allocate marshalling buffer */"];
-    ["    _total_buffer_size = _input_buffer_size;"];
-    ["    OE_ADD_SIZE(_total_buffer_size, _output_buffer_size);"];
-    [""];
-    [sprintf "    _buffer = (uint8_t*) %s(_total_buffer_size);" alloc_func];
-    ["    _input_buffer = _buffer;"];
-    ["    _output_buffer = _buffer + _input_buffer_size;"];
-    ["    if (_buffer == NULL) {"];
-    ["        _result = OE_OUT_OF_MEMORY;"];
-    ["        goto done;"];
-    ["    }"];
-    [""]; (* Serialize in and in-out parameters *)
-    ["    /* Serialize buffer inputs (in and in-out parameters) */"];
-    [sprintf "    _pargs_in = (%s_args_t*)_input_buffer;" fd.fname];
-    ["    OE_ADD_SIZE(_input_buffer_offset, sizeof(*_pargs_in));\n"];
-    List.map (fun (ptype, decl) ->
-        let size = oe_get_param_size (ptype, decl, "_args.") in
-        let tystr = get_cast_to_mem_type (ptype, decl) in
-        sprintf "    OE_WRITE_IN_PARAM(%s, %s, %s);" decl.identifier size tystr)
-      (List.filter is_in_ptr fd.plist);
-    List.map (fun (ptype, decl) ->
-        let size = oe_get_param_size (ptype, decl, "_args.") in
-        let tystr = get_cast_to_mem_type (ptype, decl) in
-        sprintf "    OE_WRITE_IN_OUT_PARAM(%s, %s, %s);" decl.identifier size tystr)
-      (List.filter is_inout_ptr fd.plist);
-    [""];
-    ["    /* Copy args structure (now filled) to input buffer */"];
-    ["    memcpy(_pargs_in, &_args, sizeof(*_pargs_in));\n"]]
+let oe_prepare_input_buffer (fd: func_decl) (alloc_func: string) = [
+  (* Compute input buffer size. *)
+  "    /* Compute input buffer size. Include in and in-out parameters. */";
+  sprintf "    OE_ADD_SIZE(_input_buffer_size, sizeof(%s_args_t));" fd.fname;
+  String.concat "\n"
+    (List.map
+       (fun (ptype, decl) ->
+          let size = oe_get_param_size (ptype, decl, "_args.") in
+          sprintf "    if (%s) OE_ADD_SIZE(_input_buffer_size, %s);" decl.identifier size)
+       (List.filter (fun p -> (is_in_ptr p || is_inout_ptr p)) fd.plist));
 
-let oe_process_output_buffer (os:out_channel) (fd:func_decl) =
+  (* Compute output buffer size. *)
+  "    /* Compute output buffer size. Include out and in-out parameters. */";
+  sprintf "    OE_ADD_SIZE(_output_buffer_size, sizeof(%s_args_t));" fd.fname;
+  String.concat "\n"
+    (List.map
+       (fun (ptype, decl) ->
+          let size = oe_get_param_size (ptype, decl, "_args.") in
+          sprintf "    if (%s) OE_ADD_SIZE(_output_buffer_size, %s);" decl.identifier size)
+       (List.filter (fun p -> (is_out_ptr p || is_inout_ptr p)) fd.plist));
+  "    /* Allocate marshalling buffer */";
+  "    _total_buffer_size = _input_buffer_size;";
+  "    OE_ADD_SIZE(_total_buffer_size, _output_buffer_size);";
+
+  (* Allocate buffers. *)
+  sprintf "    _buffer = (uint8_t*) %s(_total_buffer_size);" alloc_func;
+  "    _input_buffer = _buffer;";
+  "    _output_buffer = _buffer + _input_buffer_size;";
+  "    if (_buffer == NULL) {";
+  "        _result = OE_OUT_OF_MEMORY;";
+  "        goto done;";
+  "    }";
+
+  (* Serialize in parameters *)
+  "    /* Serialize buffer inputs (in and in-out parameters) */";
+  sprintf "    _pargs_in = (%s_args_t*)_input_buffer;" fd.fname;
+  "    OE_ADD_SIZE(_input_buffer_offset, sizeof(*_pargs_in));\n";
+  String.concat "\n"
+    (List.map
+       (fun (ptype, decl) ->
+          let size = oe_get_param_size (ptype, decl, "_args.") in
+          let tystr = get_cast_to_mem_type (ptype, decl) in
+          sprintf "    OE_WRITE_IN_PARAM(%s, %s, %s);" decl.identifier size tystr)
+       (List.filter is_in_ptr fd.plist));
+
+  (* Serialize in-out parameters *)
+  String.concat "\n"
+    (List.map
+       (fun (ptype, decl) ->
+          let size = oe_get_param_size (ptype, decl, "_args.") in
+          let tystr = get_cast_to_mem_type (ptype, decl) in
+          sprintf "    OE_WRITE_IN_OUT_PARAM(%s, %s, %s);" decl.identifier size tystr)
+       (List.filter is_inout_ptr fd.plist));
+
+  (* Copy args. *)
+  "    /* Copy args structure (now filled) to input buffer */";
+  "    memcpy(_pargs_in, &_args, sizeof(*_pargs_in));\n"]
+
+let oe_process_output_buffer (os: out_channel) (fd: func_decl) =
   (* Verify that the ecall succeeded *)
   fprintf os "    /* Set up output arg struct pointer */\n";
   fprintf os "    _pargs_out = (%s_args_t*)_output_buffer;\n" fd.fname;
@@ -822,36 +835,38 @@ let oe_gen_ocall_host_wrapper (os: out_channel) (uf: untrusted_func) =
 
   (* Prepare in and in-out parameters *)
   fprintf os "    /* Set in and in-out pointers */\n";
-  List.iter (fun (ptype, decl) ->
-      match ptype with
-      | PTPtr (atype, ptr_attr) ->
-        if ptr_attr.pa_chkptr then
-          let size = oe_get_param_size (ptype, decl, "pargs_in->") in
-          let tystr = get_cast_to_mem_type (ptype, decl) in
-          match ptr_attr.pa_direction with
-          | PtrIn -> fprintf os "    OE_SET_IN_POINTER(%s, %s, %s);\n" decl.identifier size tystr
-          | PtrInOut -> fprintf os "    OE_SET_IN_OUT_POINTER(%s, %s, %s);\n" decl.identifier size tystr
-          | _ -> ()
-        else ()
-      | _ -> ()
-    ) fd.plist;
+  List.iter
+    (fun (ptype, decl) ->
+       match ptype with
+       | PTVal _ -> ()
+       | PTPtr (_, a) ->
+         if a.pa_chkptr then
+           let size = oe_get_param_size (ptype, decl, "pargs_in->") in
+           let tystr = get_cast_to_mem_type (ptype, decl) in
+           match a.pa_direction with
+           | PtrIn -> fprintf os "    OE_SET_IN_POINTER(%s, %s, %s);\n" decl.identifier size tystr
+           | PtrInOut -> fprintf os "    OE_SET_IN_OUT_POINTER(%s, %s, %s);\n" decl.identifier size tystr
+           | _ -> ()
+         else ())
+    fd.plist;
   fprintf os "\n";
 
   (* Prepare out and in-out parameters. The in-out parameter is copied to output buffer. *)
   fprintf os "    /* Set out and in-out pointers. In-out parameters are copied to output buffer. */\n";
-  List.iter (fun (ptype, decl) ->
-      match ptype with
-      | PTPtr (atype, ptr_attr) ->
-        if ptr_attr.pa_chkptr then
-          let size = oe_get_param_size (ptype, decl, "pargs_in->") in
-          let tystr = get_cast_to_mem_type (ptype, decl) in
-          match ptr_attr.pa_direction with
-          | PtrOut -> fprintf os "    OE_SET_OUT_POINTER(%s, %s, %s);\n" decl.identifier size tystr
-          | PtrInOut -> fprintf os "    OE_COPY_AND_SET_IN_OUT_POINTER(%s, %s, %s);\n" decl.identifier size tystr
-          | _ -> ()
-        else ()
-      | _ -> ()
-    ) fd.plist;
+  List.iter
+    (fun (ptype, decl) ->
+       match ptype with
+       | PTVal _ -> ()
+       | PTPtr (_, a) ->
+         if a.pa_chkptr then
+           let size = oe_get_param_size (ptype, decl, "pargs_in->") in
+           let tystr = get_cast_to_mem_type (ptype, decl) in
+           match a.pa_direction with
+           | PtrOut -> fprintf os "    OE_SET_OUT_POINTER(%s, %s, %s);\n" decl.identifier size tystr
+           | PtrInOut -> fprintf os "    OE_COPY_AND_SET_IN_OUT_POINTER(%s, %s, %s);\n" decl.identifier size tystr
+           | _ -> ()
+         else ())
+    fd.plist;
   fprintf os "\n";
 
   (* Call the host function *)
@@ -939,43 +954,47 @@ let warn_signed_size_or_count_types (fd: func_decl) =
     ) fd.plist |> List.filter (fun x -> String.length x > 0) (* Remove the empty strings. *)
   in
   (* Print warnings for size parameters that are [Signed]. *)
-  List.iter (fun (ptype, decl) ->
-      (* TODO: Maybe make this a utility function. *)
-      let get_int_signedness (i: int_attr) = i.ia_signedness in
-      let name = decl.identifier in
-      if List.mem name size_params then
-        match ptype with
-        (* TODO: Combine these two patterns. *)
-        | PTVal (Long s | LLong s) when s = Signed -> print_signedness_warning name
-        | PTVal (Int i) when get_int_signedness i = Signed -> print_signedness_warning name
-        | _ -> ()
-    ) fd.plist
+  List.iter
+    (fun (ptype, decl) ->
+       (* TODO: Maybe make this a utility function. *)
+       let get_int_signedness (i: int_attr) = i.ia_signedness in
+       let name = decl.identifier in
+       if List.mem name size_params then
+         match ptype with
+         (* TODO: Combine these two patterns. *)
+         | PTVal (Long s | LLong s) when s = Signed -> print_signedness_warning name
+         | PTVal (Int i) when get_int_signedness i = Signed -> print_signedness_warning name
+         | _ -> ())
+    fd.plist
 
-let warn_size_and_count_params (fd:func_decl) =
-  let print_size_and_count_warning { ps_size; ps_count } =
+let warn_size_and_count_params (fd: func_decl) =
+  let print_size_and_count_warning {ps_size; ps_count} =
     match ps_size, ps_count with
         | Some (AString p), Some (AString q) ->
           failwithf "Function '%s': simultaneous 'size' and 'count' parameters '%s' and '%s' are not supported by oeedger8r.\n" fd.fname p q
         | _ -> ()
   in
-  List.iter (fun (ptype, _) ->
-      match ptype with
-      | PTPtr (_, ptr_attr) when ptr_attr.pa_chkptr ->
-        print_size_and_count_warning ptr_attr.pa_size
-      | _ -> ()
-    ) fd.plist
+  List.iter
+    (fun (ptype, _) ->
+       match ptype with
+       | PTPtr (_, a) when a.pa_chkptr ->
+         print_size_and_count_warning a.pa_size
+       | _ -> ())
+    fd.plist
 
 (** Validate Open Enclave supported EDL features. *)
 let validate_oe_support (ec: enclave_content) (ep: edger8r_params) =
   (* check supported options *)
   if ep.use_prefix then failwithf "--use_prefix option is not supported by oeedger8r.";
-  List.iter (fun f ->
-      (if f.tf_is_priv then
-         failwithf "Function '%s': 'private' specifier is not supported by oeedger8r" f.tf_fdecl.fname);
-      (if f.tf_is_switchless then
-         failwithf "Function '%s': switchless ecalls and ocalls are not yet supported by Open Enclave SDK." f.tf_fdecl.fname);
-    ) ec.tfunc_decls;
-  List.iter (fun f ->
+  List.iter
+    (fun f ->
+       (if f.tf_is_priv then
+          failwithf "Function '%s': 'private' specifier is not supported by oeedger8r" f.tf_fdecl.fname);
+       (if f.tf_is_switchless then
+          failwithf "Function '%s': switchless ecalls and ocalls are not yet supported by Open Enclave SDK." f.tf_fdecl.fname))
+    ec.tfunc_decls;
+  List.iter
+    (fun f ->
       (if f.uf_fattr.fa_convention <> CC_NONE then
          let cconv_str = get_call_conv_str f.uf_fattr.fa_convention in
          printf "Warning: Function '%s': Calling convention '%s' for ocalls is not supported by oeedger8r.\n" f.uf_fdecl.fname cconv_str);
