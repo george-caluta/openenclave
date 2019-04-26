@@ -11,12 +11,11 @@ open Printf
 open Util
 
 (** ----- Begin code borrowed and tweaked from {!CodeGen.ml}. ----- *)
-let is_foreign_array (pt: parameter_type) =
-  match pt with
-    PTVal _ -> false
-  | PTPtr(t, a) ->
+let is_foreign_array = function
+  | PTVal _ -> false
+  | PTPtr (t, a) ->
     match t with
-      Foreign _ -> a.pa_isary
+    | Foreign _ -> a.pa_isary
     | _ -> false
 
 (** Get the array declaration from a list of array dimensions. Empty
