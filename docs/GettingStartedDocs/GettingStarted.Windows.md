@@ -103,6 +103,20 @@ C:\> where ocaml
 C:\Program Files\ocpwin64\4.02.1+ocp1-msvc64-20160113\bin\ocaml.exe
 ```
 
+Configuration script
+---------------------------------
+The repository contains a Powershell script that will automatically configure a clean
+ACC virtual machine with all the prerequisites needed to successfully build the project.
+
+The script can be found in ```scripts/oe-env-prepare.ps1```
+
+To run it simply invoke it from the powershell console
+
+```powershell
+cd scripts
+.\oe-env-prepare.ps1
+```
+
 Obtaining the source distribution
 ---------------------------------
 
