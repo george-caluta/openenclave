@@ -7,7 +7,12 @@
   become_method: runas
   tasks:
   - name: Run the OE setup script
-    script: ../oe-env-prepare.ps1
+    script: ../install-windows-prereqs.ps1 -IntelPSWURL "https://oejenkins.blob.core.windows.net/oejenkins/Intel_SGX_PSW_for_Windows_v2.3.100.49777.exe" -IntelDCAPURL "https://oejenkins.blob.core.windows.net/oejenkins/Intel_SGX_DCAP_for_Windows_v1.1.100.49925.exe"
+
+  - name: OE setup | Wait for system to become reachable over WinRM
+    wait_for_connection:
+      delay: 5
+      timeout: 600 # 10 minutes timeout to cover any worst case scenario
 
   - import_role:
       name: windows/openenclave
